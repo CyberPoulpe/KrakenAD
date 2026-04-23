@@ -7,8 +7,6 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # -- Configuration ------------------------------------------------------------
 BASE_DIR="${KRAKANAD_BASE:-/data}"
 RUSTHOUND_DIR="$BASE_DIR/RustHound-CE"
@@ -19,8 +17,6 @@ BH_PORT_WEB="${BH_PORT_WEB:-8080}"
 BH_PORT_NEO4J="${BH_PORT_NEO4J:-7687}"
 NEO4J_USER="neo4j"
 NEO4J_PASS="bloodhoundcommunityedition"
-BH_ADMIN_EMAIL="admin@krakenad.local"
-BH_ADMIN_PASS="KrakenAD2024!"
 
 TOTAL_STEPS=7
 
@@ -39,24 +35,23 @@ cleanup() {
     local exit_code=$?
     echo ""
     if [[ -n "${COMPOSE_FILE:-}" && -n "${COMPOSE_CMD:-}" && -n "${SAFE_NAME:-}" ]]; then
-        # Sauvegarde des logs Docker avant extinction
         if [[ -n "${PROJECT_DIR:-}" ]]; then
-            docker logs "${CONTAINER_BH:-}"       > "${PROJECT_DIR}/docker-bloodhound.log" 2>&1 || true
-            docker logs "${CONTAINER_NEO4J:-}"    > "${PROJECT_DIR}/docker-neo4j.log"     2>&1 || true
-            docker logs "${CONTAINER_PG:-}"       > "${PROJECT_DIR}/docker-postgres.log"  2>&1 || true
-            echo -e "  ${YELLOW}→${RESET}  Logs Docker sauvegardés dans $PROJECT_DIR/"
+            docker logs "${CONTAINER_BH:-}"    > "${PROJECT_DIR}/docker-bloodhound.log" 2>&1 || true
+            docker logs "${CONTAINER_NEO4J:-}" > "${PROJECT_DIR}/docker-neo4j.log"     2>&1 || true
+            docker logs "${CONTAINER_PG:-}"    > "${PROJECT_DIR}/docker-postgres.log"  2>&1 || true
+            echo -e "  ${YELLOW}→${RESET}  Logs Docker sauvegardes dans $PROJECT_DIR/"
         fi
-        echo -e "  ${YELLOW}→${RESET}  Arrêt des containers BloodHound CE..."
+        echo -e "  ${YELLOW}→${RESET}  Arret des containers BloodHound CE..."
         $COMPOSE_CMD -f "$COMPOSE_FILE" -p "krakanad-${SAFE_NAME}" down \
             --timeout 10 2>/dev/null \
-            && echo -e "  ${GREEN}✔${RESET}  Containers arrêtés proprement." \
-            || echo -e "  ${YELLOW}⚠${RESET}  Arrêt partiel — vérifiez avec : docker ps"
+            && echo -e "  ${GREEN}✔${RESET}  Containers arretes proprement." \
+            || echo -e "  ${YELLOW}⚠${RESET}  Arret partiel — verifiez avec : docker ps"
     fi
     exit $exit_code
 }
 trap cleanup EXIT
 
-# -- Bannière -----------------------------------------------------------------
+# -- Banniere -----------------------------------------------------------------
 clear
 echo -e "${BOLD}"
 echo "  ╔═══════════════════════════════════════╗"
@@ -66,24 +61,24 @@ echo "  ╚═══════════════════════
 echo -e "${RESET}"
 
 # =============================================================================
-# ÉTAPE 1 — Vérification de l'environnement
+# ETAPE 1 — Verification de l'environnement
 # =============================================================================
-step 1 "Vérification de l'environnement"
+step 1 "Verification de l'environnement"
 
 [[ "$(uname -s)" == "Linux" ]] || fatal "Ce script ne fonctionne que sur Linux."
 
-if command -v apt-get &>/dev/null; then   PKG_MANAGER="apt"
-elif command -v dnf &>/dev/null; then     PKG_MANAGER="dnf"
-elif command -v yum &>/dev/null; then     PKG_MANAGER="yum"
-elif command -v pacman &>/dev/null; then  PKG_MANAGER="pacman"
-else fatal "Aucun gestionnaire de paquets reconnu (apt/dnf/yum/pacman)."; fi
+if   command -v apt-get &>/dev/null; then PKG_MANAGER="apt"
+elif command -v dnf     &>/dev/null; then PKG_MANAGER="dnf"
+elif command -v yum     &>/dev/null; then PKG_MANAGER="yum"
+elif command -v pacman  &>/dev/null; then PKG_MANAGER="pacman"
+else fatal "Aucun gestionnaire de paquets reconnu."; fi
 
 ok "OS Linux — gestionnaire : $PKG_MANAGER"
 
 UPDATE_DONE=false
 pkg_update() {
     $UPDATE_DONE && return
-    info "Mise à jour de l'index des paquets..."
+    info "Mise a jour de l'index des paquets..."
     case "$PKG_MANAGER" in
         apt)     sudo apt-get update -qq >/dev/null 2>&1 ;;
         dnf|yum) sudo "$PKG_MANAGER" makecache -q >/dev/null 2>&1 ;;
@@ -102,12 +97,12 @@ pkg_install() {
     esac
 }
 
-ok "Environnement validé"
+ok "Environnement valide"
 
 # =============================================================================
-# ÉTAPE 2 — Dépendances système
+# ETAPE 2 — Dependances systeme
 # =============================================================================
-step 2 "Vérification / installation des dépendances"
+step 2 "Verification / installation des dependances"
 
 DEPS_TO_INSTALL=()
 check_dep() { command -v "$1" &>/dev/null || DEPS_TO_INSTALL+=("${2:-$1}"); }
@@ -137,42 +132,37 @@ if docker compose version &>/dev/null 2>&1; then
 elif command -v docker-compose &>/dev/null; then
     COMPOSE_CMD="docker-compose"
 else
-    info "Installation docker-compose-plugin..."
     pkg_update
     pkg_install docker-compose-plugin 2>/dev/null || pkg_install docker-compose 2>/dev/null || true
-    docker compose version &>/dev/null 2>&1 && COMPOSE_CMD="docker compose"
-    command -v docker-compose &>/dev/null && COMPOSE_CMD="docker-compose"
-    [[ -z "$COMPOSE_CMD" ]] && fatal "docker compose introuvable après installation."
+    docker compose version &>/dev/null 2>&1 && COMPOSE_CMD="docker compose" || true
+    command -v docker-compose &>/dev/null && COMPOSE_CMD="docker-compose" || true
+    [[ -z "$COMPOSE_CMD" ]] && fatal "docker compose introuvable."
 fi
 
 # Docker daemon
 if ! docker info &>/dev/null 2>&1; then
-    warn "Docker daemon non démarré — tentative..."
-    sudo systemctl start docker 2>/dev/null || fatal "Impossible de démarrer Docker."
+    warn "Docker daemon non demarre — tentative..."
+    sudo systemctl start docker 2>/dev/null || fatal "Impossible de demarrer Docker."
     sudo systemctl enable docker 2>/dev/null || true
     sleep 3
 fi
-docker info &>/dev/null 2>&1 || fatal "Docker inaccessible. Ajoutez votre user au groupe docker ou lancez en root."
+docker info &>/dev/null 2>&1 || fatal "Docker inaccessible."
 
-ok "Dépendances système OK"
+ok "Dependances systeme OK"
 
 # =============================================================================
-# ÉTAPE 3 — Outils Python (bloodhound-python + AD-Miner)
+# ETAPE 3 — Outils Python
 # =============================================================================
-step 3 "Vérification / installation des outils Python"
+step 3 "Verification / installation des outils Python"
 
 mkdir -p "$BASE_DIR" "$PROJECTS_DIR" "$RUSTHOUND_DIR"
-
-[[ -d "$VENV_PYTHON" ]] || { info "Création du venv Python..."; python3 -m venv "$VENV_PYTHON"; }
+[[ -d "$VENV_PYTHON" ]] || python3 -m venv "$VENV_PYTHON"
 
 source "$VENV_PYTHON/bin/activate"
 pip install --quiet --upgrade pip
 
-command -v bloodhound-python &>/dev/null \
-    || { info "Installation bloodhound-python..."; pip install --quiet bloodhound; }
-
-command -v AD-miner &>/dev/null \
-    || { info "Installation AD-Miner..."; pip install --quiet ad-miner; }
+command -v bloodhound-python &>/dev/null || pip install --quiet bloodhound
+command -v AD-miner          &>/dev/null || pip install --quiet ad-miner
 
 command -v bloodhound-python &>/dev/null || fatal "bloodhound-python introuvable."
 command -v AD-miner          &>/dev/null || fatal "AD-Miner introuvable."
@@ -200,7 +190,6 @@ echo ""
 [[ -z "$PASSWORD"     ]] && fatal "Mot de passe manquant."
 [[ -z "$DC_IP"        ]] && fatal "IP du DC manquante."
 
-# Noms de containers uniques par projet (évite les conflits)
 SAFE_NAME="${PROJECT_NAME//[^a-zA-Z0-9_-]/_}"
 CONTAINER_NEO4J="krakanad-${SAFE_NAME}-neo4j"
 CONTAINER_PG="krakanad-${SAFE_NAME}-postgres"
@@ -213,7 +202,7 @@ mkdir -p "$PROJECT_DIR" "$COMPOSE_DIR" \
     "$COMPOSE_DIR/postgres/data"
 
 # =============================================================================
-# ÉTAPE 4 — Collecte LDAP
+# ETAPE 4 — Collecte LDAP
 # =============================================================================
 step 4 "Collecte LDAP — BloodHound.py"
 info "Domaine : $DOMAIN  |  DC : $DC_IP  |  Utilisateur : $USERNAME"
@@ -238,26 +227,25 @@ if [[ -z "$ZIPFILE" ]]; then
     info "Pas de ZIP — compression des JSON..."
     ZIPFILE="$PROJECT_DIR/${PROJECT_NAME}.zip"
     zip -j "$ZIPFILE" "$PROJECT_DIR"/*.json 2>/dev/null \
-        || fatal "Aucune donnée collectée. Vérifiez $PROJECT_DIR/collect.log"
+        || fatal "Aucune donnee collectee. Verifiez $PROJECT_DIR/collect.log"
 fi
 
-ok "Données collectées : $(basename "$ZIPFILE")"
+ok "Donnees collectees : $(basename "$ZIPFILE")"
 
 # =============================================================================
-# ÉTAPE 5 — BloodHound CE via Docker (gestion native)
+# ETAPE 5 — BloodHound CE via Docker
 # =============================================================================
-step 5 "Démarrage BloodHound CE"
+step 5 "Demarrage BloodHound CE"
 
-# Génération / réutilisation du mot de passe Postgres
+# Mot de passe Postgres (persistant entre relances)
 ENV_FILE="$COMPOSE_DIR/.env"
-if [[ -f "$ENV_FILE" ]]; then
-    PG_PASS=$(grep "^PG_PASS=" "$ENV_FILE" | cut -d= -f2)
-fi
+PG_PASS=""
+[[ -f "$ENV_FILE" ]] && PG_PASS=$(grep "^PG_PASS=" "$ENV_FILE" | cut -d= -f2 || true)
 PG_PASS="${PG_PASS:-$(openssl rand -hex 16 2>/dev/null || echo "krakanadpgpass")}"
 echo "PG_PASS=${PG_PASS}" > "$ENV_FILE"
 
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
-cat > "$COMPOSE_FILE" <<COMPOSE
+cat > "$COMPOSE_FILE" << COMPOSE
 services:
 
   neo4j:
@@ -302,8 +290,6 @@ services:
     environment:
       - bhe_database_connection=user=bloodhound password=${PG_PASS} dbname=bloodhound host=postgres
       - bhe_neo4j_connection=neo4j://neo4j:${NEO4J_PASS}@neo4j:7687/
-      - bhe_default_admin_principal_name=${BH_ADMIN_EMAIL}
-      - bhe_default_admin_password=${BH_ADMIN_PASS}
     ports:
       - "127.0.0.1:${BH_PORT_WEB}:8080"
     depends_on:
@@ -314,98 +300,137 @@ services:
 
 COMPOSE
 
-info "Démarrage des containers..."
+info "Demarrage des containers..."
 $COMPOSE_CMD -f "$COMPOSE_FILE" -p "krakanad-${SAFE_NAME}" up -d 2>&1 \
     | grep -E "(Started|Running|Created|Error|error)" || true
 
-# -- Attente Neo4j ------------------------------------------------------------
-info "Attente de Neo4j (jusqu'à 2 min)..."
+# Attente Neo4j
+info "Attente de Neo4j (jusqu'a 2 min)..."
 NEO4J_OK=false
 for i in $(seq 1 24); do
     if docker exec "$CONTAINER_NEO4J" \
-        cypher-shell -u "$NEO4J_USER" -p "$NEO4J_PASS" "RETURN 1" \
-        &>/dev/null 2>&1; then
+        cypher-shell -u "$NEO4J_USER" -p "$NEO4J_PASS" "RETURN 1" &>/dev/null 2>&1; then
         NEO4J_OK=true; break
     fi
     sleep 5
 done
-$NEO4J_OK || fatal "Neo4j n'a pas démarré.
-Logs : docker logs $CONTAINER_NEO4J"
+$NEO4J_OK || fatal "Neo4j n'a pas demarre. Logs : docker logs $CONTAINER_NEO4J"
 
-# -- Attente BloodHound API ---------------------------------------------------
-info "Attente de BloodHound CE API (jusqu'à 2 min)..."
+# Attente BloodHound (endpoint public /ui/login)
+info "Attente de BloodHound CE (jusqu'a 2 min)..."
 BH_OK=false
 for i in $(seq 1 24); do
-    if curl -sf -o /dev/null -w "%{http_code}" "http://localhost:${BH_PORT_WEB}/ui/login" 2>/dev/null | grep -qE "^(200|301|302)"; then
+    CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
+        "http://localhost:${BH_PORT_WEB}/ui/login" 2>/dev/null || echo "000")
+    if [[ "$CODE" =~ ^(200|301|302)$ ]]; then
         BH_OK=true; break
     fi
     sleep 5
 done
-$BH_OK || fatal "BloodHound CE API inaccessible.
-Logs : docker logs $CONTAINER_BH"
+$BH_OK || fatal "BloodHound CE inaccessible. Logs : docker logs $CONTAINER_BH"
 
-ok "BloodHound CE actif → http://localhost:${BH_PORT_WEB}"
+ok "BloodHound CE actif -> http://localhost:${BH_PORT_WEB}"
 
 # =============================================================================
-# ÉTAPE 6 — Import via API BloodHound CE
+# ETAPE 6 — Import via API BloodHound CE
 # =============================================================================
-step 6 "Import des données dans BloodHound CE"
+step 6 "Import des donnees dans BloodHound CE"
 
-# --- Authentification --------------------------------------------------------
-info "Authentification sur l'API..."
+# --- Recuperation du mot de passe initial dans les logs ----------------------
+info "Recuperation du mot de passe initial BloodHound CE..."
 
-LOGIN_RESP=$(curl -sf \
-    -X POST "http://localhost:${BH_PORT_WEB}/api/v2/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"login_method\":\"secret\",\"principal\":\"${BH_ADMIN_EMAIL}\",\"secret\":\"${BH_ADMIN_PASS}\"}" \
-    2>/dev/null || echo "{}")
+INIT_PASS=""
+for i in $(seq 1 12); do
+    INIT_PASS=$(docker logs "$CONTAINER_BH" 2>&1 \
+        | grep -oP "(?<=Initial Password set to )[^\s\"]+" \
+        | head -1 || true)
+    [[ -n "$INIT_PASS" ]] && break
+    sleep 5
+done
 
-BH_TOKEN=$(echo "$LOGIN_RESP" | jq -r '.data.session_token // empty' 2>/dev/null || true)
-
-if [[ -z "$BH_TOKEN" ]]; then
-    fatal "Authentification échouée sur BloodHound CE.
-  Réponse : $LOGIN_RESP
-  → Vérifiez les credentials : ${BH_ADMIN_EMAIL} / ${BH_ADMIN_PASS}
-  → Logs container : docker logs $CONTAINER_BH"
+if [[ -n "$INIT_PASS" ]]; then
+    info "Mot de passe initial trouve"
+    BH_LOGIN_USER="admin"
+    BH_LOGIN_PASS="$INIT_PASS"
+else
+    warn "Mot de passe initial non trouve dans les logs"
+    BH_LOGIN_USER="admin"
+    BH_LOGIN_PASS="admin"
 fi
 
-ok "Authentification OK (token obtenu)"
+# --- Authentification avec essais multiples ----------------------------------
+info "Authentification sur l'API..."
+
+bh_try_login() {
+    local u="$1" p="$2"
+    local body
+    body=$(jq -cn --arg u "$u" --arg p "$p" \
+        '{"login_method":"secret","principal":$u,"secret":$p}')
+    curl -sf \
+        -X POST "http://localhost:${BH_PORT_WEB}/api/v2/login" \
+        -H "Content-Type: application/json" \
+        -d "$body" 2>/dev/null || echo "{}"
+}
+
+BH_TOKEN=""
+CANDIDATES_USER=("$BH_LOGIN_USER" "admin" "admin@example.com")
+CANDIDATES_PASS=("$BH_LOGIN_PASS" "admin" "bloodhound" "bloodhoundcommunityedition")
+
+for u in "${CANDIDATES_USER[@]}"; do
+    for p in "${CANDIDATES_PASS[@]}"; do
+        RESP=$(bh_try_login "$u" "$p")
+        TOK=$(echo "$RESP" | jq -r '.data.session_token // empty' 2>/dev/null || true)
+        if [[ -n "$TOK" ]]; then
+            BH_TOKEN="$TOK"
+            info "Connecte avec : $u"
+            break 2
+        fi
+    done
+done
+
+if [[ -z "$BH_TOKEN" ]]; then
+    warn "Logs BloodHound (lignes utiles) :"
+    docker logs "$CONTAINER_BH" 2>&1 \
+        | grep -iE "password|admin|initial|error" | tail -5 \
+        | while IFS= read -r line; do warn "  $line"; done
+    fatal "Authentification impossible. Consultez : $PROJECT_DIR/docker-bloodhound.log"
+fi
+
+ok "Authentification OK"
 
 # --- Upload du ZIP -----------------------------------------------------------
-info "Démarrage de la session d'upload..."
+info "Demarrage de la session d'upload..."
 
+START_BODY=$(jq -cn '{}')
 START_RESP=$(curl -sf \
     -X POST "http://localhost:${BH_PORT_WEB}/api/v2/file-upload/start" \
     -H "Authorization: Bearer $BH_TOKEN" \
     -H "Content-Type: application/json" \
-    2>/dev/null || echo "{}")
+    -d "$START_BODY" 2>/dev/null || echo "{}")
 
 UPLOAD_ID=$(echo "$START_RESP" | jq -r '.data.id // empty' 2>/dev/null || true)
 
-if [[ -z "$UPLOAD_ID" ]]; then
-    fatal "Impossible de créer une session d'upload.
-  Réponse : $START_RESP
-  → API BH peut différer selon la version. Logs : docker logs $CONTAINER_BH"
-fi
+[[ -z "$UPLOAD_ID" ]] && fatal "Impossible de creer une session d'upload.
+  Reponse : $START_RESP"
 
-info "Upload de $(basename "$ZIPFILE") (taille : $(du -sh "$ZIPFILE" | cut -f1))..."
+info "Upload de $(basename "$ZIPFILE")..."
 
 curl -sf \
     -X POST "http://localhost:${BH_PORT_WEB}/api/v2/file-upload/${UPLOAD_ID}" \
     -H "Authorization: Bearer $BH_TOKEN" \
     -H "Content-Type: application/zip" \
     --data-binary "@${ZIPFILE}" \
-    &>/dev/null || fatal "Erreur lors du transfert du fichier ZIP."
+    &>/dev/null || fatal "Erreur transfert ZIP."
 
 curl -sf \
     -X POST "http://localhost:${BH_PORT_WEB}/api/v2/file-upload/${UPLOAD_ID}/end" \
     -H "Authorization: Bearer $BH_TOKEN" \
-    &>/dev/null || warn "Fin de session d'upload incertaine"
+    &>/dev/null || warn "Fin de session incertaine"
 
-ok "Fichier uploadé (session ID: $UPLOAD_ID)"
+ok "Fichier uploade (ID: $UPLOAD_ID)"
 
 # --- Attente ingestion -------------------------------------------------------
-info "Attente de l'ingestion (jusqu'à 5 min)..."
+info "Attente de l'ingestion (jusqu'a 5 min)..."
 INGESTED=false
 for i in $(seq 1 30); do
     sleep 10
@@ -413,21 +438,20 @@ for i in $(seq 1 30); do
         "http://localhost:${BH_PORT_WEB}/api/v2/file-upload" \
         -H "Authorization: Bearer $BH_TOKEN" 2>/dev/null \
         | jq -r '.data[-1].status // "unknown"' 2>/dev/null || echo "unknown")
-
     case "$STATUS" in
-        Complete|3)  ok "Ingestion terminée"; INGESTED=true; break ;;
-        Failed|4)    warn "Ingestion signalée comme échouée (données peut-être partielles)"; break ;;
-        *)           [[ $((i % 3)) -eq 0 ]] && info "Ingestion en cours... (${i}0s / statut: $STATUS)" ;;
+        Complete|3)  ok "Ingestion terminee"; INGESTED=true; break ;;
+        Failed|4)    warn "Ingestion echouee (donnees peut-etre partielles)"; break ;;
+        *)           [[ $((i % 3)) -eq 0 ]] && info "Ingestion en cours... (${i}0s)" ;;
     esac
 done
-$INGESTED || warn "Ingestion timeout — les données sont peut-être partiellement importées"
+$INGESTED || warn "Timeout ingestion — donnees peut-etre partiellement importees"
 
-ok "Import terminé"
+ok "Import termine"
 
 # =============================================================================
-# ÉTAPE 7 — Rapport AD-Miner
+# ETAPE 7 — Rapport AD-Miner
 # =============================================================================
-step 7 "Génération du rapport AD-Miner"
+step 7 "Generation du rapport AD-Miner"
 
 source "$VENV_PYTHON/bin/activate"
 cd "$PROJECT_DIR"
@@ -443,24 +467,20 @@ deactivate
 
 REPORT_DIR=$(ls -td "$PROJECT_DIR"/render_* 2>/dev/null | head -1 || true)
 [[ -n "$REPORT_DIR" ]] \
-    && ok "Rapport généré dans $(basename "$REPORT_DIR")/" \
-    || ok "Rapport généré (voir ad-miner.log)"
+    && ok "Rapport genere dans $(basename "$REPORT_DIR")/" \
+    || ok "Rapport genere (voir ad-miner.log)"
 
 # =============================================================================
-# Résumé
+# Resume
 # =============================================================================
 echo ""
 echo -e "  ${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo -e "  ${BOLD}Projet          :${RESET} $PROJECT_NAME"
-echo -e "  ${BOLD}Données         :${RESET} $PROJECT_DIR"
+echo -e "  ${BOLD}Donnees         :${RESET} $PROJECT_DIR"
 [[ -n "${REPORT_DIR:-}" ]] && \
 echo -e "  ${BOLD}Rapport AD-Miner:${RESET} $REPORT_DIR/"
 echo -e "  ${BOLD}Log collecte    :${RESET} $PROJECT_DIR/collect.log"
 echo -e "  ${BOLD}Log AD-Miner    :${RESET} $PROJECT_DIR/ad-miner.log"
-echo ""
-echo -e "  ${DIM}BloodHound CE   : http://localhost:${BH_PORT_WEB}"
-echo -e "  Login           : ${BH_ADMIN_EMAIL}  /  ${BH_ADMIN_PASS}"
-echo -e "  Neo4j bolt      : bolt://localhost:${BH_PORT_NEO4J}  (${NEO4J_USER} / ${NEO4J_PASS})"
-echo -e "  (Les containers sont arrêtés automatiquement à la fin du script)${RESET}"
+echo -e "  ${DIM}(Les containers sont arretes automatiquement)${RESET}"
 echo -e "  ${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo ""
