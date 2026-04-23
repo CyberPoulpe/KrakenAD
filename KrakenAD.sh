@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # -- Configuration ------------------------------------------------------------
 
-BASE_DIR="${KRAKENАД_BASE:-/data}"
+BASE_DIR="${KRAKANAD_BASE:-/data}"
 BLOODHOUND_AUTOMATION="$BASE_DIR/bloodhound-automation"
 RUSTHOUND_DIR="$BASE_DIR/RustHound-CE"
 VENV_PYTHON="$RUSTHOUND_DIR/.venv"
