@@ -336,7 +336,7 @@ Logs : docker logs $CONTAINER_NEO4J"
 info "Attente de BloodHound CE API (jusqu'à 2 min)..."
 BH_OK=false
 for i in $(seq 1 24); do
-    if curl -sf "http://localhost:${BH_PORT_WEB}/api/version" &>/dev/null; then
+    if curl -sf -o /dev/null -w "%{http_code}" "http://localhost:${BH_PORT_WEB}/ui/login" 2>/dev/null | grep -qE "^(200|301|302)"; then
         BH_OK=true; break
     fi
     sleep 5
