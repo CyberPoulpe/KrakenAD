@@ -20,7 +20,7 @@
 ## ⚡ Démarrage rapide
 
 ```bash
-git clone https://github.com/<vous>/KrakenAD.git
+git clone https://github.com/CyberPoulpe/KrakenAD.git
 cd KrakenAD
 chmod +x KrakenAD.sh
 ./KrakenAD.sh
@@ -113,9 +113,3 @@ Les identifiants BloodHound CE et Neo4j sont configurables directement dans le s
 ## ⚠️ Avertissement légal
 
 Ce script est destiné à des **audits de sécurité autorisés**. Toute utilisation sur des systèmes sans autorisation explicite est illégale. L'auteur décline toute responsabilité en cas d'utilisation malveillante.
-
----
-
-## 📄 Licence
-
-MIT — voir [LICENSE](LICENSE)
