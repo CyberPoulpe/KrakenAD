@@ -39,6 +39,13 @@ cleanup() {
     local exit_code=$?
     echo ""
     if [[ -n "${COMPOSE_FILE:-}" && -n "${COMPOSE_CMD:-}" && -n "${SAFE_NAME:-}" ]]; then
+        # Sauvegarde des logs Docker avant extinction
+        if [[ -n "${PROJECT_DIR:-}" ]]; then
+            docker logs "${CONTAINER_BH:-}"       > "${PROJECT_DIR}/docker-bloodhound.log" 2>&1 || true
+            docker logs "${CONTAINER_NEO4J:-}"    > "${PROJECT_DIR}/docker-neo4j.log"     2>&1 || true
+            docker logs "${CONTAINER_PG:-}"       > "${PROJECT_DIR}/docker-postgres.log"  2>&1 || true
+            echo -e "  ${YELLOW}→${RESET}  Logs Docker sauvegardés dans $PROJECT_DIR/"
+        fi
         echo -e "  ${YELLOW}→${RESET}  Arrêt des containers BloodHound CE..."
         $COMPOSE_CMD -f "$COMPOSE_FILE" -p "krakanad-${SAFE_NAME}" down \
             --timeout 10 2>/dev/null \
@@ -294,7 +301,7 @@ services:
     restart: unless-stopped
     environment:
       - bhe_database_connection=user=bloodhound password=${PG_PASS} dbname=bloodhound host=postgres
-      - bhe_neo4j_connection=bolt://neo4j:${NEO4J_PASS}@neo4j:7687/
+      - bhe_neo4j_connection=neo4j://neo4j:${NEO4J_PASS}@neo4j:7687/
       - bhe_default_admin_principal_name=${BH_ADMIN_EMAIL}
       - bhe_default_admin_password=${BH_ADMIN_PASS}
     ports:
