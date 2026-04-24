@@ -142,11 +142,12 @@ fi
 if [[ ! -d "$BH_AUTO_VENV" ]]; then
     info "Installation des dependances bloodhound-automation..."
     python3 -m venv "$BH_AUTO_VENV"
-    source "$BH_AUTO_VENV/bin/activate"
-    pip install --quiet --upgrade pip
-    pip install --quiet -r "$BH_AUTO_DIR/requirements.txt"
-    deactivate
 fi
+source "$BH_AUTO_VENV/bin/activate"
+pip install --quiet --upgrade pip
+pip install --quiet -r "$BH_AUTO_DIR/requirements.txt" 2>/dev/null || true
+pip install --quiet colorama requests docker 2>/dev/null || true
+deactivate
 
 # Venv principal (bloodhound-python + AD-Miner)
 if [[ ! -d "$VENV_DIR" ]]; then
