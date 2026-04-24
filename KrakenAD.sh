@@ -274,134 +274,140 @@ port, user, password, import_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.ar
 uri = f"bolt://localhost:{port}"
 driver = GraphDatabase.driver(uri, auth=(user, password))
 json_files = glob.glob(os.path.join(import_dir, "*.json"))
+print(f"    → Import de {len(json_files)} fichiers JSON dans Neo4j...", flush=True)
 
-print(f"    → Import de {len(json_files)} fichiers JSON dans Neo4j...")
-
-# Contraintes Neo4j 4.4 (syntaxe correcte)
-constraints = [
-    ("User",      "CREATE CONSTRAINT user_oid      IF NOT EXISTS FOR (n:User)      REQUIRE n.objectid IS UNIQUE"),
-    ("Computer",  "CREATE CONSTRAINT computer_oid  IF NOT EXISTS FOR (n:Computer)  REQUIRE n.objectid IS UNIQUE"),
-    ("Group",     "CREATE CONSTRAINT group_oid     IF NOT EXISTS FOR (n:Group)     REQUIRE n.objectid IS UNIQUE"),
-    ("Domain",    "CREATE CONSTRAINT domain_oid    IF NOT EXISTS FOR (n:Domain)    REQUIRE n.objectid IS UNIQUE"),
-    ("GPO",       "CREATE CONSTRAINT gpo_oid       IF NOT EXISTS FOR (n:GPO)       REQUIRE n.objectid IS UNIQUE"),
-    ("OU",        "CREATE CONSTRAINT ou_oid        IF NOT EXISTS FOR (n:OU)        REQUIRE n.objectid IS UNIQUE"),
-    ("Container", "CREATE CONSTRAINT container_oid IF NOT EXISTS FOR (n:Container) REQUIRE n.objectid IS UNIQUE"),
-]
-
-with driver.session() as session:
-    for _, c in constraints:
-        try:
-            session.run(c)
-        except Exception:
-            pass
-
-# Mapping type → label BloodHound
 TYPE_MAP = {
-    "users": "User", "user": "User",
-    "computers": "Computer", "computer": "Computer",
-    "groups": "Group", "group": "Group",
-    "domains": "Domain", "domain": "Domain",
-    "gpos": "GPO", "gpo": "GPO",
-    "ous": "OU", "ou": "OU",
-    "containers": "Container", "container": "Container",
+    "users":"User","user":"User",
+    "computers":"Computer","computer":"Computer",
+    "groups":"Group","group":"Group",
+    "domains":"Domain","domain":"Domain",
+    "gpos":"GPO","gpo":"GPO",
+    "ous":"OU","ou":"OU",
+    "containers":"Container","container":"Container",
 }
 
-# Mapping type → clés de relations BloodHound
-REL_MAP = {
-    "groups":    [("Members",    "MemberOf",  True)],
-    "domains":   [("ChildObjects","Contains", False)],
-    "ous":       [("ChildObjects","Contains", False)],
-    "computers": [("LocalAdmins","AdminTo",   True), ("Sessions","HasSession",False)],
-}
+def get_oid(item):
+    return (item.get("ObjectIdentifier") or item.get("objectidentifier") or
+            item.get("Properties",{}).get("objectid","") or "").upper()
 
-total_nodes = 0
-total_rels  = 0
+def get_label(obj_type):
+    m = {"User":"User","Computer":"Computer","Group":"Group",
+         "Domain":"Domain","GPO":"GPO","OU":"OU","Container":"Container",
+         "Base":"Base"}
+    return m.get(obj_type, obj_type if obj_type else "Base")
+
+def merge_node(session, label, oid, props):
+    session.run("MERGE (n:"+label+" {objectid:$o}) SET n+=$p", o=oid, p=props)
+
+def merge_rel(session, alabel, aoid, reltype, blabel, boid):
+    session.run(
+        "MERGE (a:"+alabel+" {objectid:$a}) "
+        "MERGE (b:"+blabel+" {objectid:$b}) "
+        "MERGE (a)-[:"+reltype+"]->(b)",
+        a=aoid, b=boid
+    )
+
+with driver.session() as s:
+    for c in [
+        "CREATE CONSTRAINT user_oid      IF NOT EXISTS FOR (n:User)      REQUIRE n.objectid IS UNIQUE",
+        "CREATE CONSTRAINT computer_oid  IF NOT EXISTS FOR (n:Computer)  REQUIRE n.objectid IS UNIQUE",
+        "CREATE CONSTRAINT group_oid     IF NOT EXISTS FOR (n:Group)     REQUIRE n.objectid IS UNIQUE",
+        "CREATE CONSTRAINT domain_oid    IF NOT EXISTS FOR (n:Domain)    REQUIRE n.objectid IS UNIQUE",
+        "CREATE CONSTRAINT gpo_oid       IF NOT EXISTS FOR (n:GPO)       REQUIRE n.objectid IS UNIQUE",
+        "CREATE CONSTRAINT ou_oid        IF NOT EXISTS FOR (n:OU)        REQUIRE n.objectid IS UNIQUE",
+        "CREATE CONSTRAINT container_oid IF NOT EXISTS FOR (n:Container) REQUIRE n.objectid IS UNIQUE",
+    ]:
+        try: s.run(c)
+        except: pass
+
+total_n, total_r = 0, 0
 
 for jf in sorted(json_files):
     fname = os.path.basename(jf)
     try:
-        with open(jf, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = json.load(open(jf, encoding="utf-8"))
     except Exception as e:
-        print(f"    ⚠  Erreur lecture {fname}: {e}", flush=True)
-        continue
+        print(f"    ⚠  {fname}: {e}", flush=True); continue
 
-    meta  = data.get("meta", {})
-    dtype = meta.get("type", "").lower()
-    items = data.get("data", [])
+    dtype = data.get("meta",{}).get("type","").lower()
+    items = data.get("data",[])
     if not items:
-        print(f"    →  {fname}: vide", flush=True)
         continue
 
-    label = TYPE_MAP.get(dtype, dtype.capitalize() if dtype else "Unknown")
-    node_count = 0
-    rel_count  = 0
+    label = TYPE_MAP.get(dtype, dtype.capitalize() or "Base")
+    nc, rc = 0, 0
 
-    with driver.session() as session:
+    with driver.session() as s:
         for item in items:
-            # ObjectIdentifier est à la racine dans les JSON BH
-            oid = (item.get("ObjectIdentifier") or
-                   item.get("objectidentifier") or
-                   item.get("Properties", {}).get("objectid", ""))
-            if not oid:
-                continue
-            oid = oid.upper()
+            oid = get_oid(item)
+            if not oid: continue
 
-            # Propriétés : fusionner Properties + champs plats utiles
-            props = dict(item.get("Properties", {}))
+            props = {k.lower():v for k,v in item.get("Properties",{}).items()
+                     if not isinstance(v,(dict,list))}
             props["objectid"] = oid
-            # Normaliser les clés en minuscules
-            props = {k.lower(): v for k, v in props.items()
-                     if not isinstance(v, (dict, list))}
+            try: merge_node(s, label, oid, props); nc+=1
+            except: pass
 
-            try:
-                session.run(
-                    "MERGE (n:" + label + " {objectid: $oid}) SET n += $props",
-                    oid=oid, props=props
-                )
-                node_count += 1
-            except Exception as e:
-                pass
+            # --- MemberOf (groups) ---
+            for m in item.get("Members",[]):
+                tid = get_oid(m) if isinstance(m,dict) else str(m).upper()
+                tl  = get_label(m.get("ObjectType","Base") if isinstance(m,dict) else "Base")
+                if tid:
+                    try: merge_rel(s, tl, tid, "MemberOf", label, oid); rc+=1
+                    except: pass
 
-            # Relations
-            for rel_key, rel_type, target_is_source in REL_MAP.get(dtype, []):
-                members = item.get(rel_key, [])
-                if not isinstance(members, list):
-                    continue
-                for m in members:
-                    if isinstance(m, dict):
-                        tid = (m.get("ObjectIdentifier") or m.get("MemberId", ""))
-                        tlabel = m.get("ObjectType", "Base")
-                    else:
-                        tid = str(m)
-                        tlabel = "Base"
-                    if not tid:
-                        continue
-                    tid = tid.upper()
-                    try:
-                        if target_is_source:
-                            session.run(
-                                "MERGE (a:" + tlabel + " {objectid:$tid}) "
-                                "MERGE (b:" + label + " {objectid:$oid}) "
-                                "MERGE (a)-[:" + rel_type + "]->(b)",
-                                tid=tid, oid=oid
-                            )
-                        else:
-                            session.run(
-                                "MERGE (a:" + label + " {objectid:$oid}) "
-                                "MERGE (b:" + tlabel + " {objectid:$tid}) "
-                                "MERGE (a)-[:" + rel_type + "]->(b)",
-                                oid=oid, tid=tid
-                            )
-                        rel_count += 1
-                    except Exception:
-                        pass
+            # --- Contains (ous/domains) ---
+            for m in item.get("ChildObjects",[]):
+                tid = get_oid(m) if isinstance(m,dict) else str(m).upper()
+                tl  = get_label(m.get("ObjectType","Base") if isinstance(m,dict) else "Base")
+                if tid:
+                    try: merge_rel(s, label, oid, "Contains", tl, tid); rc+=1
+                    except: pass
 
-    total_nodes += node_count
-    total_rels  += rel_count
-    print(f"    ✔  {fname}: {node_count} noeuds, {rel_count} relations", flush=True)
+            # --- GpLink (ous/domains) ---
+            for m in item.get("Links",[]):
+                if not isinstance(m,dict): continue
+                tid = m.get("GUID","").upper() or m.get("ObjectIdentifier","").upper()
+                if tid:
+                    try: merge_rel(s, "GPO", tid, "GpLink", label, oid); rc+=1
+                    except: pass
 
-print(f"    ✔  Total : {total_nodes} noeuds, {total_rels} relations", flush=True)
+            # --- AdminTo / HasSession / AllowedToDelegate (computers) ---
+            for m in item.get("LocalAdmins",{}).get("Results",[]):
+                tid = get_oid(m) if isinstance(m,dict) else str(m).upper()
+                tl  = get_label(m.get("ObjectType","Base") if isinstance(m,dict) else "Base")
+                if tid:
+                    try: merge_rel(s, tl, tid, "AdminTo", label, oid); rc+=1
+                    except: pass
+
+            for m in item.get("Sessions",{}).get("Results",[]):
+                if not isinstance(m,dict): continue
+                tid = m.get("UserSID","").upper()
+                if tid:
+                    try: merge_rel(s, "User", tid, "HasSession", label, oid); rc+=1
+                    except: pass
+
+            for m in item.get("AllowedToDelegate",[]):
+                tid = get_oid(m) if isinstance(m,dict) else str(m).upper()
+                tl  = get_label(m.get("ObjectType","Computer") if isinstance(m,dict) else "Computer")
+                if tid:
+                    try: merge_rel(s, label, oid, "AllowedToDelegate", tl, tid); rc+=1
+                    except: pass
+
+            # --- ACL (tous types) ---
+            for ace in item.get("Aces",[]):
+                if not isinstance(ace,dict): continue
+                tid      = ace.get("PrincipalSID","").upper()
+                tl       = get_label(ace.get("PrincipalType","Base"))
+                rel_type = ace.get("RightName","")
+                if tid and rel_type:
+                    try: merge_rel(s, tl, tid, rel_type, label, oid); rc+=1
+                    except: pass
+
+    total_n += nc; total_r += rc
+    print(f"    ✔  {fname}: {nc} noeuds, {rc} relations", flush=True)
+
+print(f"    ✔  Total : {total_n} noeuds, {total_r} relations", flush=True)
 driver.close()
 PYEOF
 
