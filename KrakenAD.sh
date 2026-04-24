@@ -250,6 +250,7 @@ step 4 "Import des donnees dans Neo4j"
 
 # Copier le ZIP dans le dossier import Neo4j et dezipper
 info "Preparation des fichiers JSON..."
+rm -f "$COMPOSE_DIR/neo4j/import/"*.json 2>/dev/null || true
 cp "$ZIPFILE" "$COMPOSE_DIR/neo4j/import/"
 cd "$COMPOSE_DIR/neo4j/import"
 unzip -o "$(basename "$ZIPFILE")" "*.json" 2>/dev/null || true
@@ -355,7 +356,7 @@ for jf in sorted(json_files):
 
             try:
                 session.run(
-                    f"MERGE (n:{label} {{objectid: $oid}}) SET n += $props",
+                    "MERGE (n:" + label + " {objectid: $oid}) SET n += $props",
                     oid=oid, props=props
                 )
                 node_count += 1
@@ -380,16 +381,16 @@ for jf in sorted(json_files):
                     try:
                         if target_is_source:
                             session.run(
-                                f"MERGE (a:{tlabel} {{objectid:\$tid}}) "
-                                f"MERGE (b:{label} {{objectid:\$oid}}) "
-                                f"MERGE (a)-[:{rel_type}]->(b)",
+                                "MERGE (a:" + tlabel + " {objectid:$tid}) "
+                                "MERGE (b:" + label + " {objectid:$oid}) "
+                                "MERGE (a)-[:" + rel_type + "]->(b)",
                                 tid=tid, oid=oid
                             )
                         else:
                             session.run(
-                                f"MERGE (a:{label} {{objectid:\$oid}}) "
-                                f"MERGE (b:{tlabel} {{objectid:\$tid}}) "
-                                f"MERGE (a)-[:{rel_type}]->(b)",
+                                "MERGE (a:" + label + " {objectid:$oid}) "
+                                "MERGE (b:" + tlabel + " {objectid:$tid}) "
+                                "MERGE (a)-[:" + rel_type + "]->(b)",
                                 oid=oid, tid=tid
                             )
                         rel_count += 1
