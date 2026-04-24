@@ -51,7 +51,7 @@ cleanup() {
     if [[ -n "$PROJECT_NAME" && -d "$BH_AUTO_DIR" ]]; then
         info "Arret de BloodHound (bloodhound-automation stop)..."
         source "$BH_AUTO_VENV/bin/activate"
-        python3 "$BH_AUTO_DIR/bloodhound-automation.py" stop "$PROJECT_NAME" \
+        cd "$BH_AUTO_DIR" && python3 bloodhound-automation.py stop "$PROJECT_NAME" \
             2>/dev/null && ok "BloodHound arrete." || warn "Arret partiel."
         deactivate
     fi
@@ -219,22 +219,24 @@ ok "Collecte OK : $(basename "$ZIPFILE")"
 step 3 "Demarrage BloodHound CE (bloodhound-automation)"
 
 source "$BH_AUTO_VENV/bin/activate"
+cd "$BH_AUTO_DIR"
 
 # Si le projet existe déjà, le démarrer ; sinon le créer
-EXISTING=$(python3 "$BH_AUTO_DIR/bloodhound-automation.py" list 2>/dev/null || true)
+EXISTING=$(python3 bloodhound-automation.py list 2>/dev/null || true)
 
 if echo "$EXISTING" | grep -q "^$PROJECT_NAME$"; then
     info "Projet existant — demarrage..."
-    python3 "$BH_AUTO_DIR/bloodhound-automation.py" start "$PROJECT_NAME" 2>&1 | tail -5
+    python3 bloodhound-automation.py start "$PROJECT_NAME" 2>&1 | tail -5
 else
     info "Creation du projet '$PROJECT_NAME'..."
-    python3 "$BH_AUTO_DIR/bloodhound-automation.py" start \
+    python3 bloodhound-automation.py start \
         -bp "$BH_PORT_NEO4J" \
         -np "$BH_PORT_NEO4J_HTTP" \
         -wp "$BH_PORT_WEB" \
         "$PROJECT_NAME" 2>&1 | grep -E "^\[|neo4j|BloodHound|password" || true
 fi
 
+cd "$PROJECT_DIR"
 deactivate
 
 # Vérifier que Neo4j répond
@@ -257,13 +259,15 @@ ok "BloodHound CE actif"
 step 4 "Import des donnees BloodHound"
 
 source "$BH_AUTO_VENV/bin/activate"
+cd "$BH_AUTO_DIR"
 
 info "Upload de $(basename "$ZIPFILE")..."
-python3 "$BH_AUTO_DIR/bloodhound-automation.py" data \
+python3 bloodhound-automation.py data \
     -z "$ZIPFILE" \
     "$PROJECT_NAME" \
     2>&1 | grep -E "^\[|\[\+\]|\[\*\]" || true
 
+cd "$PROJECT_DIR"
 deactivate
 ok "Import termine"
 
