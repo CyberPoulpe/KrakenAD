@@ -265,14 +265,13 @@ source "$VENV_PYTHON/bin/activate"
 # Installer neo4j python driver si besoin
 pip install --quiet neo4j 2>/dev/null || true
 
-python3 << PYEOF
+python3 - "${BH_PORT_NEO4J}" "${NEO4J_USER}" "${NEO4J_PASS}" "${COMPOSE_DIR}/neo4j/import" << 'PYEOF'
 import json, os, glob, sys
 from neo4j import GraphDatabase
 
-uri = "bolt://localhost:${BH_PORT_NEO4J}"
-driver = GraphDatabase.driver(uri, auth=("${NEO4J_USER}", "${NEO4J_PASS}"))
-
-import_dir = "${COMPOSE_DIR}/neo4j/import"
+port, user, password, import_dir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+uri = f"bolt://localhost:{port}"
+driver = GraphDatabase.driver(uri, auth=(user, password))
 json_files = glob.glob(os.path.join(import_dir, "*.json"))
 
 print(f"    → Import de {len(json_files)} fichiers JSON dans Neo4j...")
