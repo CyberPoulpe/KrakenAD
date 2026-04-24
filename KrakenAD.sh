@@ -449,6 +449,7 @@ AD-miner \
     -b  "bolt://localhost:$NEO4J_PORT" \
     -u  "$NEO4J_USER" \
     -p  "$NEO4J_PASS" \
+    -d  "$DOMAIN" \
     2>&1 | tee "$PROJECT_DIR/ad-miner.log" | grep -vE "^$" || true
 
 deactivate
