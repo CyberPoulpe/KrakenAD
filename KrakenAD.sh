@@ -50,10 +50,11 @@ purge_project() {
     local proj="$1"
     [[ -z "$proj" ]] && return
     info "Purge du projet '$proj'..."
-    cd "$BH_AUTO_DIR"
-    source "$BH_AUTO_VENV/bin/activate"
-    python3 bloodhound-automation.py stop "$proj" 2>/dev/null || true
-    deactivate
+    (
+        cd "$BH_AUTO_DIR"
+        source "$BH_AUTO_VENV/bin/activate"
+        python3 bloodhound-automation.py stop "$proj" 2>/dev/null || true
+    )
     docker volume rm "${proj}-app-db" "${proj}-graph-db" 2>/dev/null || true
     docker network rm "${proj}_default" 2>/dev/null || true
     rm -rf "$BH_AUTO_DIR/projects/$proj" 2>/dev/null || true
