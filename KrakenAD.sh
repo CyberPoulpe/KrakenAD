@@ -271,6 +271,25 @@ cd "$PROJECT_DIR"
 deactivate
 ok "Import termine"
 
+# Attendre que BloodHound CE analyse et peuple Neo4j
+info "Attente de l'analyse BloodHound CE (jusqu'a 5 min)..."
+NEO4J_CONTAINER=$(docker ps --format "{{.Names}}" | grep -E "${PROJECT_NAME}.*graph.db" | head -1 || true)
+if [[ -n "$NEO4J_CONTAINER" ]]; then
+    PREV_COUNT=0
+    for i in $(seq 1 30); do
+        sleep 10
+        COUNT=$(docker exec "$NEO4J_CONTAINER"             cypher-shell -u "$NEO4J_USER" -p "$NEO4J_PASS"             "MATCH ()-[r]->() RETURN count(r)" 2>/dev/null             | grep -E "^[0-9]+" | head -1 || echo "0")
+        COUNT="${COUNT//[^0-9]/}"
+        COUNT="${COUNT:-0}"
+        if [[ "$COUNT" -gt 0 && "$COUNT" -eq "$PREV_COUNT" ]]; then
+            ok "Neo4j stable : $COUNT relations"
+            break
+        fi
+        [[ "$COUNT" -gt 0 ]] && info "Neo4j en cours d'analyse : $COUNT relations..."
+        PREV_COUNT="$COUNT"
+    done
+fi
+
 # =============================================================================
 # ETAPE 5 — RAPPORT AD-MINER
 # =============================================================================
