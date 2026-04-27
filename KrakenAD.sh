@@ -233,20 +233,26 @@ step 3 "Demarrage BloodHound CE (bloodhound-automation)"
 source "$BH_AUTO_VENV/bin/activate"
 cd "$BH_AUTO_DIR"
 
-# Si le projet existe déjà, le démarrer ; sinon le créer
+# Si le projet existe déjà, le supprimer pour repartir sur des données fraîches
 EXISTING=$(python3 bloodhound-automation.py list 2>/dev/null || true)
 
 if echo "$EXISTING" | grep -q "^$PROJECT_NAME$"; then
-    info "Projet existant — demarrage..."
-    python3 bloodhound-automation.py start "$PROJECT_NAME" 2>&1 | tail -5
-else
-    info "Creation du projet '$PROJECT_NAME'..."
-    python3 bloodhound-automation.py start \
-        -bp "$BH_PORT_NEO4J" \
-        -np "$BH_PORT_NEO4J_HTTP" \
-        -wp "$BH_PORT_WEB" \
-        "$PROJECT_NAME" 2>&1 | grep -E "^\[|neo4j|BloodHound|password" || true
+    warn "Projet '$PROJECT_NAME' existant — suppression des anciennes donnees..."
+    # Arreter et supprimer les containers du projet
+    python3 bloodhound-automation.py stop "$PROJECT_NAME" 2>/dev/null || true
+    # Supprimer les donnees du projet (docker volumes + dossier)
+    docker volume rm "${PROJECT_NAME}-app-db" "${PROJECT_NAME}-graph-db" 2>/dev/null || true
+    rm -rf "$BH_AUTO_DIR/projects/$PROJECT_NAME" 2>/dev/null || true
+    sleep 3
+    ok "Anciennes donnees supprimees"
 fi
+
+info "Creation du projet '$PROJECT_NAME'..."
+python3 bloodhound-automation.py start \
+    -bp "$BH_PORT_NEO4J" \
+    -np "$BH_PORT_NEO4J_HTTP" \
+    -wp "$BH_PORT_WEB" \
+    "$PROJECT_NAME" 2>&1 | grep -E "^\[|neo4j|BloodHound|password" || true
 
 cd "$PROJECT_DIR"
 deactivate
