@@ -150,15 +150,27 @@ pip install --quiet colorama requests docker 2>/dev/null || true
 deactivate
 
 # Venv principal (bloodhound-python + AD-Miner)
-if [[ ! -d "$VENV_DIR" ]]; then
-    python3 -m venv "$VENV_DIR"
-fi
+[[ -d "$VENV_DIR" ]] || python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 pip install --quiet --upgrade pip
-command -v bloodhound-python &>/dev/null || pip install --quiet bloodhound
-command -v AD-miner          &>/dev/null || pip install --quiet ad-miner
+
+info "Mise a jour de bloodhound-python..."
+pip install --quiet --upgrade bloodhound 2>/dev/null || true
+
+info "Mise a jour de AD-Miner (depuis GitHub)..."
+pip install --quiet --upgrade 'git+https://github.com/AD-Security/AD_Miner.git' 2>/dev/null || true
+
 command -v bloodhound-python &>/dev/null || fatal "bloodhound-python introuvable."
 command -v AD-miner          &>/dev/null || fatal "AD-Miner introuvable."
+deactivate
+
+# Mise a jour bloodhound-automation
+info "Mise a jour de bloodhound-automation..."
+git -C "$BH_AUTO_DIR" pull --quiet 2>/dev/null || true
+source "$BH_AUTO_VENV/bin/activate"
+pip install --quiet --upgrade pip
+pip install --quiet --upgrade -r "$BH_AUTO_DIR/requirements.txt" 2>/dev/null || true
+pip install --quiet --upgrade colorama requests docker 2>/dev/null || true
 deactivate
 
 ok "Dependances OK"
