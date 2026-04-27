@@ -326,6 +326,110 @@ REPORT_DIR=$(ls -td "$PROJECT_DIR"/render_* 2>/dev/null | head -1 || true)
     || ok "Rapport genere (voir ad-miner.log)"
 
 # =============================================================================
+# SERVEUR WEB TEMPORAIRE POUR TELECHARGEMENT
+# =============================================================================
+
+# ZIP du rapport
+REPORT_ZIP="$PROJECT_DIR/${PROJECT_NAME}_rapport.zip"
+info "Creation du ZIP du rapport..."
+cd "$PROJECT_DIR"
+zip -r "$REPORT_ZIP" "$(basename "$REPORT_DIR")" 2>/dev/null
+ok "ZIP : $REPORT_ZIP"
+
+# Trouver une IP accessible
+SERVER_IP=$(ip route get 1 2>/dev/null | awk '{print $7; exit}' || hostname -I | awk '{print $1}')
+SERVER_PORT=9999
+
+# Page HTML de telechargement
+ZIP_NAME="$(basename "$REPORT_ZIP")"
+SERVE_DIR=$(mktemp -d)
+cp "$REPORT_ZIP" "$SERVE_DIR/"
+
+cat > "$SERVE_DIR/index.html" << HTML
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="5;url=about:blank">
+    <title>KrakenAD — Telechargement du rapport</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee;
+               display: flex; justify-content: center; align-items: center;
+               height: 100vh; margin: 0; }
+        .box { background: #16213e; border-radius: 12px; padding: 40px 60px;
+               text-align: center; box-shadow: 0 0 30px #0f3460; }
+        h1 { color: #e94560; margin-bottom: 10px; }
+        p  { color: #aaa; margin-bottom: 30px; }
+        a  { background: #e94560; color: white; padding: 14px 32px;
+             border-radius: 8px; text-decoration: none; font-size: 18px;
+             font-weight: bold; }
+        a:hover { background: #c73652; }
+        .note { margin-top: 20px; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>KrakenAD</h1>
+        <p>Rapport d'audit Active Directory : <strong>${PROJECT_NAME}</strong></p>
+        <a href="${ZIP_NAME}" download onclick="setTimeout(()=>fetch('/shutdown'),2000)">
+            Telecharger le rapport
+        </a>
+        <div class="note">Le serveur s'arretera automatiquement apres le telechargement.</div>
+    </div>
+</body>
+</html>
+HTML
+
+# Serveur Python qui s'arrête après le téléchargement
+cat > "$SERVE_DIR/server.py" << 'PYEOF'
+import http.server, os, sys, threading, time, urllib.parse
+
+PORT = int(sys.argv[1])
+SERVE_DIR = sys.argv[2]
+ZIP_NAME = sys.argv[3]
+downloaded = False
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=SERVE_DIR, **kwargs)
+
+    def do_GET(self):
+        global downloaded
+        path = urllib.parse.unquote(self.path.lstrip('/'))
+        if path == 'shutdown' or (path == ZIP_NAME and not downloaded):
+            if path == ZIP_NAME:
+                downloaded = True
+            super().do_GET()
+            if downloaded or path == 'shutdown':
+                threading.Thread(target=lambda: (time.sleep(1), os._exit(0))).start()
+        else:
+            super().do_GET()
+
+    def log_message(self, fmt, *args):
+        pass  # Silencieux
+
+os.chdir(SERVE_DIR)
+with http.server.HTTPServer(('0.0.0.0', PORT), Handler) as httpd:
+    print(f"[OK] Serveur actif sur http://{sys.argv[4]}:{PORT}", flush=True)
+    print(f"[OK] S'arretera automatiquement apres le telechargement.", flush=True)
+    httpd.serve_forever()
+PYEOF
+
+echo ""
+echo -e "  ${CYAN}${BOLD}==========================================${RESET}"
+echo -e "  ${BOLD}Rapport pret au telechargement :${RESET}"
+echo -e "  ${CYAN}  http://${SERVER_IP}:${SERVER_PORT}${RESET}"
+echo -e "  ${DIM}  (Le serveur s'arrete apres le telechargement)${RESET}"
+echo -e "  ${CYAN}${BOLD}==========================================${RESET}"
+echo ""
+
+# Lancer le serveur (bloquant jusqu'à téléchargement)
+python3 "$SERVE_DIR/server.py" "$SERVER_PORT" "$SERVE_DIR" "$ZIP_NAME" "$SERVER_IP"
+
+# Nettoyage
+rm -rf "$SERVE_DIR"
+
+# =============================================================================
 # RESUME
 # =============================================================================
 echo ""
