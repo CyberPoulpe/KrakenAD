@@ -44,6 +44,21 @@ fatal() { echo -e "\n${RED}${BOLD}[ERREUR]${RESET} $1\n"; exit 1; }
 # =============================================================================
 # NETTOYAGE AUTOMATIQUE
 # =============================================================================
+
+# Fonction : supprime toutes les données d'un projet bloodhound-automation
+purge_project() {
+    local proj="$1"
+    [[ -z "$proj" ]] && return
+    info "Purge du projet '$proj'..."
+    cd "$BH_AUTO_DIR"
+    source "$BH_AUTO_VENV/bin/activate"
+    python3 bloodhound-automation.py stop "$proj" 2>/dev/null || true
+    deactivate
+    docker volume rm "${proj}-app-db" "${proj}-graph-db" 2>/dev/null || true
+    docker network rm "${proj}_default" 2>/dev/null || true
+    rm -rf "$BH_AUTO_DIR/projects/$proj" 2>/dev/null || true
+    ok "Projet '$proj' purge"
+}
 PROJECT_NAME=""
 cleanup() {
     local code=$?
@@ -236,16 +251,9 @@ cd "$BH_AUTO_DIR"
 # Si le projet existe déjà, le supprimer pour repartir sur des données fraîches
 EXISTING=$(python3 bloodhound-automation.py list 2>/dev/null || true)
 
-if echo "$EXISTING" | grep -q "^$PROJECT_NAME$"; then
-    warn "Projet '$PROJECT_NAME' existant — suppression des anciennes donnees..."
-    # Arreter et supprimer les containers du projet
-    python3 bloodhound-automation.py stop "$PROJECT_NAME" 2>/dev/null || true
-    # Supprimer les donnees du projet (docker volumes + dossier)
-    docker volume rm "${PROJECT_NAME}-app-db" "${PROJECT_NAME}-graph-db" 2>/dev/null || true
-    rm -rf "$BH_AUTO_DIR/projects/$PROJECT_NAME" 2>/dev/null || true
-    sleep 3
-    ok "Anciennes donnees supprimees"
-fi
+# Toujours purger avant de créer — données fraîches garanties
+purge_project "$PROJECT_NAME"
+sleep 2
 
 info "Creation du projet '$PROJECT_NAME'..."
 python3 bloodhound-automation.py start \
@@ -432,8 +440,14 @@ echo ""
 # Lancer le serveur (bloquant jusqu'à téléchargement)
 python3 "$SERVE_DIR/server.py" "$SERVER_PORT" "$SERVE_DIR" "$ZIP_NAME" "$SERVER_IP"
 
-# Nettoyage
+# Nettoyage du serveur temporaire
 rm -rf "$SERVE_DIR"
+
+# Purge des données du projet après téléchargement
+info "Purge des donnees du projet apres telechargement..."
+purge_project "$PROJECT_NAME"
+rm -rf "$PROJECT_DIR" 2>/dev/null || true
+ok "Donnees supprimees — serveur propre"
 
 # =============================================================================
 # RESUME
