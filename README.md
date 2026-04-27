@@ -1,19 +1,18 @@
-# 🐙 KrakenAD.sh
+# 🐙 KrakenAD
 
-> Script d'audit Active Directory tout-en-un — collecte LDAP, import BloodHound CE, rapport AD-Miner. **Fonctionne sur n'importe quel serveur Linux dès le premier lancement.**
+> Script d'audit Active Directory tout-en-un — collecte LDAP, import BloodHound CE, rapport AD-Miner et téléchargement sécurisé.
+> **Fonctionne sur n'importe quel serveur Linux, en français ou en anglais, dès le premier lancement.**
 
 ---
 
 ## ✨ Fonctionnalités
 
 - **Auto-installation** : détecte et installe toutes les dépendances manquantes (`apt`, `dnf`, `yum`, `pacman`)
-- **Idempotent** : si les outils sont déjà présents, le script les réutilise sans rien réinstaller
-- **Pipeline complet** en une seule commande :
-  1. Collecte LDAP via `bloodhound-python`
-  2. Démarrage de BloodHound CE (Docker)
-  3. Import automatique des données
-  4. Génération du rapport HTML avec AD-Miner
-- **Multi-projet** : chaque audit est isolé dans son propre répertoire
+- **Auto-mise à jour** : met à jour les outils à chaque lancement (bloodhound-ce-python, AD-Miner, bloodhound-automation)
+- **Multi-langue** : fonctionne quel que soit la langue de l'Active Directory (français, anglais, etc.)
+- **Multi-projet** : chaque audit est isolé dans son propre répertoire, sans conflit
+- **Nettoyage automatique** : BloodHound CE s'arrête proprement à la fin, même en cas d'erreur ou Ctrl+C
+- **Téléchargement sécurisé** : page web temporaire auto-destructrice pour récupérer le rapport
 
 ---
 
@@ -26,7 +25,7 @@ chmod +x KrakenAD.sh
 ./KrakenAD.sh
 ```
 
-Le script vous demandera ensuite :
+Le script demande ensuite les informations de la cible :
 
 ```
   Nom du projet   : pentest-client-2024
@@ -34,6 +33,16 @@ Le script vous demandera ensuite :
   Utilisateur     : john.doe
   Mot de passe    : ••••••••
   IP du DC        : 192.168.1.10
+```
+
+À la fin, une URL s'affiche pour télécharger le rapport depuis n'importe quel navigateur :
+
+```
+  ==========================================
+  Rapport pret au telechargement :
+  http://192.168.1.50:9999
+  (Le serveur s'arrete apres le telechargement)
+  ==========================================
 ```
 
 ---
@@ -46,34 +55,61 @@ Le script vous demandera ensuite :
 | Droits | `sudo` ou `root` pour l'installation initiale |
 | Réseau | Accès au DC sur le port 389 (LDAP) |
 | Docker | Installé automatiquement si absent |
+| Compte AD | N'importe quel compte du domaine suffit |
 
-> Tout le reste (`python3`, `git`, `bloodhound-python`, `AD-Miner`, `bloodhound-automation`) est installé automatiquement au premier lancement.
+> Tout le reste (`python3`, `git`, `bloodhound-ce-python`, `AD-Miner`, `bloodhound-automation`) est installé et mis à jour automatiquement.
+
+---
+
+## 🚀 Pipeline en 5 étapes
+
+```
+[1/5] Vérification des dépendances
+      └── Détection OS, installation des outils manquants, mise à jour automatique
+
+[2/5] Collecte LDAP via bloodhound-ce-python
+      └── Dump complet de l'AD : users, groupes, computers, GPO, ACL, sessions...
+
+[3/5] Démarrage BloodHound CE
+      └── Lancement via bloodhound-automation (Docker), création ou reprise du projet
+
+[4/5] Import et analyse des données
+      └── Upload du ZIP dans BloodHound CE, attente de l'analyse Neo4j
+
+[5/5] Génération du rapport AD-Miner
+      └── Rapport HTML interactif + serveur de téléchargement temporaire
+```
 
 ---
 
 ## 🗂️ Structure des fichiers générés
 
 ```
-/data/KrakenAD/projects/
-└── <nom-du-projet>/
-    ├── *.zip              # Données BloodHound collectées
-    ├── collect.log        # Log de la collecte LDAP
-    ├── ad-miner.log       # Log AD-Miner
-    └── render_<projet>/   # Rapport HTML AD-Miner
-        └── index.html
+/data/
+├── krakanad-venv/                  # Environnement Python partagé
+├── bloodhound-automation/          # Outil de gestion BloodHound CE
+└── KrakenAD/
+    └── projects/
+        └── <nom-du-projet>/
+            ├── *.zip               # Données BloodHound collectées
+            ├── collect.log         # Log de la collecte LDAP
+            ├── ad-miner.log        # Log AD-Miner
+            └── render_<projet>/    # Rapport HTML AD-Miner
+                ├── index.html
+                └── html/           # Pages de détail (162 contrôles)
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-Les variables suivantes peuvent être surchargées via l'environnement avant l'exécution :
+Les variables suivantes peuvent être surchargées avant l'exécution :
 
 ```bash
 # Changer le répertoire de base (défaut : /data)
-export KRAKENАД_BASE=/opt/audits
+export KRAKANAD_BASE=/opt/audits
 
-# Changer les ports BloodHound CE (si conflits)
+# Changer les ports BloodHound CE (si conflits avec d'autres services)
 export BH_PORT_WEB=8001
 export BH_PORT_NEO4J=10001
 export BH_PORT_NEO4J_HTTP=10501
@@ -81,35 +117,31 @@ export BH_PORT_NEO4J_HTTP=10501
 ./KrakenAD.sh
 ```
 
-Les identifiants BloodHound CE et Neo4j sont configurables directement dans le script (section `Configuration`).
-
 ---
 
 ## 🔧 Outils utilisés
 
-| Outil | Rôle |
-|-------|------|
-| [bloodhound-python](https://github.com/dirkjanm/BloodHound.py) | Collecte LDAP/AD |
-| [BloodHound CE](https://github.com/SpecterOps/BloodHound) | Visualisation des chemins d'attaque |
-| [bloodhound-automation](https://github.com/dirkjanm/BloodHound-automation) | Gestion Docker de BloodHound CE |
-| [AD-Miner](https://github.com/Mazars-Tech/AD_Miner) | Génération du rapport HTML |
+| Outil | Rôle | Lien |
+|-------|------|------|
+| bloodhound-ce-python | Collecte LDAP/AD (format BloodHound CE) | [dirkjanm/BloodHound.py](https://github.com/dirkjanm/BloodHound.py) |
+| BloodHound CE | Analyse des chemins d'attaque | [SpecterOps/BloodHound](https://github.com/SpecterOps/BloodHound) |
+| bloodhound-automation | Gestion Docker de BloodHound CE | [Tanguy-Boisset/bloodhound-automation](https://github.com/Tanguy-Boisset/bloodhound-automation) |
+| AD-Miner | Génération du rapport HTML interactif | [AD-Security/AD_Miner](https://github.com/AD-Security/AD_Miner) |
 
 ---
 
-## 🚀 Étapes du pipeline
+## 📊 Rapport AD-Miner
 
-```
-[1/7] Vérification de l'environnement       ← Détection OS & package manager
-[2/7] Dépendances système                   ← Installation si manquantes
-[3/7] Outils AD                             ← venvs Python, bloodhound-python, AD-Miner
-[4/7] Collecte LDAP — BloodHound.py         ← Dump complet de l'AD
-[5/7] Démarrage BloodHound CE               ← Création ou reprise du projet Docker
-[6/7] Import des données                    ← Chargement du ZIP dans BloodHound CE
-[7/7] Génération du rapport AD-Miner        ← Rapport HTML interactif
-```
+Le rapport couvre **162 contrôles de sécurité** répartis en plusieurs catégories :
+
+- 🔑 **Mots de passe** : comptes sans expiration, mots de passe anciens, LAPS
+- 🎫 **Kerberos** : Kerberoastable, AS-REP Roasting, délégations, Shadow Credentials
+- 🛡️ **Permissions** : chemins vers Domain Admins, DCSync, AdminSDHolder, ACL dangereuses
+- 🖥️ **Machines** : OS obsolètes, machines fantômes, admins locaux
+- ☁️ **Azure/Entra ID** : comptes synchronisés, rôles privilégiés
 
 ---
 
 ## ⚠️ Avertissement légal
 
-Ce script est destiné à des **audits de sécurité autorisés**. Toute utilisation sur des systèmes sans autorisation explicite est illégale. L'auteur décline toute responsabilité en cas d'utilisation malveillante.
+Ce script est destiné exclusivement à des **audits de sécurité autorisés**. Toute utilisation sur des systèmes sans autorisation écrite préalable est illégale. L'auteur décline toute responsabilité en cas d'utilisation malveillante ou non autorisée.
