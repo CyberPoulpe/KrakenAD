@@ -66,7 +66,7 @@ clear
 echo -e "${BOLD}"
 echo "  +=======================================+"
 echo "  |      AUDIT ACTIVE DIRECTORY           |"
-echo "  |   bloodhound-python  +  AD-Miner       |"
+echo "  |  bloodhound-ce-python  +  AD-Miner     |"
 echo "  +=======================================+"
 echo -e "${RESET}"
 
@@ -154,13 +154,13 @@ deactivate
 source "$VENV_DIR/bin/activate"
 pip install --quiet --upgrade pip
 
-info "Mise a jour de bloodhound-python..."
-pip install --quiet --upgrade bloodhound 2>/dev/null || true
+info "Mise a jour de bloodhound-ce-python..."
+pip install --quiet --upgrade 'git+https://github.com/dirkjanm/BloodHound.py@bloodhound-ce' 2>/dev/null || true
 
 info "Mise a jour de AD-Miner (depuis GitHub)..."
 pip install --quiet --upgrade 'git+https://github.com/AD-Security/AD_Miner.git' 2>/dev/null || true
 
-command -v bloodhound-python &>/dev/null || fatal "bloodhound-python introuvable."
+command -v bloodhound-ce-python &>/dev/null || fatal "bloodhound-ce-python introuvable."
 command -v AD-miner          &>/dev/null || fatal "AD-Miner introuvable."
 deactivate
 
@@ -199,13 +199,13 @@ mkdir -p "$PROJECT_DIR"
 # =============================================================================
 # ETAPE 2 — COLLECTE LDAP
 # =============================================================================
-step 2 "Collecte LDAP via bloodhound-python"
+step 2 "Collecte LDAP via bloodhound-ce-python"
 info "Domaine=$DOMAIN  DC=$DC_IP  User=$USERNAME"
 
 source "$VENV_DIR/bin/activate"
 cd "$PROJECT_DIR"
 
-bloodhound-python \
+bloodhound-ce-python \
     -d "$DOMAIN" \
     -u "$USERNAME" \
     -p "$PASSWORD" \
