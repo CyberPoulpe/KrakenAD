@@ -50,13 +50,17 @@ purge_project() {
     local proj="$1"
     [[ -z "$proj" ]] && return
     info "Purge du projet '$proj'..."
+    # Arreter via bloodhound-automation si le projet existe
     (
         cd "$BH_AUTO_DIR"
         source "$BH_AUTO_VENV/bin/activate"
         python3 bloodhound-automation.py stop "$proj" 2>/dev/null || true
     )
+    # Supprimer tous les containers liés au projet (même en état Exited)
+    docker ps -a --format "{{.Names}}" | grep "^${proj}-"         | xargs -r docker rm -f 2>/dev/null || true
+    # Supprimer volumes, réseau et dossier projet
     docker volume rm "${proj}-app-db" "${proj}-graph-db" 2>/dev/null || true
-    docker network rm "${proj}_default" 2>/dev/null || true
+    docker network rm "${proj}_default" "${proj}-default" 2>/dev/null || true
     rm -rf "$BH_AUTO_DIR/projects/$proj" 2>/dev/null || true
     ok "Projet '$proj' purge"
 }
