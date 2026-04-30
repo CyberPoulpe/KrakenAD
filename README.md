@@ -10,7 +10,8 @@
 - **Auto-installation** : détecte et installe toutes les dépendances manquantes (`apt`, `dnf`, `yum`, `pacman`)
 - **Auto-mise à jour** : met à jour les outils à chaque lancement (bloodhound-ce-python, AD-Miner, bloodhound-automation)
 - **Multi-langue** : fonctionne quel que soit la langue de l'Active Directory (français, anglais, etc.)
-- **Multi-projet** : chaque audit est isolé dans son propre répertoire, sans conflit
+- **Nommage automatique** : chaque audit est nommé `audit-<domaine>-<date>`, aucun conflit possible
+- **Nettoyage intelligent** : conserve les 3 derniers audits, supprime automatiquement les plus anciens
 - **Nettoyage automatique** : BloodHound CE s'arrête proprement à la fin, même en cas d'erreur ou Ctrl+C
 - **Téléchargement sécurisé** : page web temporaire auto-destructrice pour récupérer le rapport
 
@@ -25,14 +26,19 @@ chmod +x KrakenAD.sh
 ./KrakenAD.sh
 ```
 
-Le script demande ensuite les informations de la cible :
+Le script demande uniquement les informations de la cible :
 
 ```
-  Nom du projet   : pentest-client-2024
   Domaine         : corp.example.com
   Utilisateur     : john.doe
   Mot de passe    : ••••••••
   IP du DC        : 192.168.1.10
+```
+
+Le nom du projet est généré automatiquement :
+
+```
+  > Nom du projet : audit-corp-20260430-091045
 ```
 
 À la fin, une URL s'affiche pour télécharger le rapport depuis n'importe quel navigateur :
@@ -66,12 +72,13 @@ Le script demande ensuite les informations de la cible :
 ```
 [1/5] Vérification des dépendances
       └── Détection OS, installation des outils manquants, mise à jour automatique
+          Nettoyage des anciens audits (conservation des 3 derniers)
 
 [2/5] Collecte LDAP via bloodhound-ce-python
       └── Dump complet de l'AD : users, groupes, computers, GPO, ACL, sessions...
 
 [3/5] Démarrage BloodHound CE
-      └── Lancement via bloodhound-automation (Docker), création ou reprise du projet
+      └── Lancement via bloodhound-automation (Docker)
 
 [4/5] Import et analyse des données
       └── Upload du ZIP dans BloodHound CE, attente de l'analyse Neo4j
@@ -86,18 +93,20 @@ Le script demande ensuite les informations de la cible :
 
 ```
 /data/
-├── krakanad-venv/                  # Environnement Python partagé
-├── bloodhound-automation/          # Outil de gestion BloodHound CE
+├── krakanad-venv/                        # Environnement Python partagé
+├── bloodhound-automation/                # Outil de gestion BloodHound CE
 └── KrakenAD/
     └── projects/
-        └── <nom-du-projet>/
-            ├── *.zip               # Données BloodHound collectées
-            ├── collect.log         # Log de la collecte LDAP
-            ├── ad-miner.log        # Log AD-Miner
-            └── render_<projet>/    # Rapport HTML AD-Miner
+        └── audit-<domaine>-<date>/       # Un dossier par audit
+            ├── *.zip                     # Données BloodHound collectées
+            ├── collect.log               # Log de la collecte LDAP
+            ├── ad-miner.log              # Log AD-Miner
+            └── render_<projet>/          # Rapport HTML AD-Miner
                 ├── index.html
-                └── html/           # Pages de détail (162 contrôles)
+                └── html/                 # Pages de détail (162 contrôles)
 ```
+
+> Les 3 derniers audits sont conservés. Les plus anciens sont supprimés automatiquement au lancement suivant.
 
 ---
 
@@ -123,7 +132,7 @@ export BH_PORT_NEO4J_HTTP=10501
 
 | Outil | Rôle | Lien |
 |-------|------|------|
-| bloodhound-ce-python | Collecte LDAP/AD (format BloodHound CE) | [dirkjanm/BloodHound.py](https://github.com/dirkjanm/BloodHound.py) |
+| bloodhound-ce-python | Collecte LDAP/AD (format BloodHound CE) | [dirkjanm/BloodHound.py](https://github.com/dirkjanm/BloodHound.py/tree/bloodhound-ce) |
 | BloodHound CE | Analyse des chemins d'attaque | [SpecterOps/BloodHound](https://github.com/SpecterOps/BloodHound) |
 | bloodhound-automation | Gestion Docker de BloodHound CE | [Tanguy-Boisset/bloodhound-automation](https://github.com/Tanguy-Boisset/bloodhound-automation) |
 | AD-Miner | Génération du rapport HTML interactif | [AD-Security/AD_Miner](https://github.com/AD-Security/AD_Miner) |
