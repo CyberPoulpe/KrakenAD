@@ -200,18 +200,42 @@ ok "Dependances OK"
 # =============================================================================
 echo ""
 echo -e "${DIM}Informations de la cible :${RESET}\n"
-read -rp  "  Nom du projet   : " PROJECT_NAME
 read -rp  "  Domaine         : " DOMAIN
 read -rp  "  Utilisateur     : " USERNAME
 read -rsp "  Mot de passe    : " PASSWORD; echo
 read -rp  "  IP du DC        : " DC_IP
 echo ""
 
-[[ -z "$PROJECT_NAME" ]] && fatal "Nom de projet manquant."
-[[ -z "$DOMAIN"       ]] && fatal "Domaine manquant."
-[[ -z "$USERNAME"     ]] && fatal "Utilisateur manquant."
-[[ -z "$PASSWORD"     ]] && fatal "Mot de passe manquant."
-[[ -z "$DC_IP"        ]] && fatal "IP du DC manquante."
+[[ -z "$DOMAIN"   ]] && fatal "Domaine manquant."
+[[ -z "$USERNAME" ]] && fatal "Utilisateur manquant."
+[[ -z "$PASSWORD" ]] && fatal "Mot de passe manquant."
+[[ -z "$DC_IP"    ]] && fatal "IP du DC manquante."
+
+# Nom du projet auto-généré : audit-<domaine>-<date>
+PROJECT_NAME="audit-${DOMAIN%%.*}-$(date +%Y%m%d-%H%M%S)"
+info "Nom du projet : $PROJECT_NAME"
+
+# Purge automatique des anciens projets (garde les 3 derniers)
+info "Nettoyage des anciens audits (conservation des 3 derniers)..."
+OLD_PROJECTS=$(ls -dt "$PROJECTS_DIR"/audit-* 2>/dev/null | tail -n +4 || true)
+if [[ -n "$OLD_PROJECTS" ]]; then
+    while IFS= read -r old_proj; do
+        old_name=$(basename "$old_proj")
+        info "Suppression ancien audit : $old_name"
+        # Containers
+        docker ps -a --format "{{.Names}}" | grep "^${old_name}-"             | xargs -r docker rm -f 2>/dev/null || true
+        # Volumes et réseau
+        docker volume rm "${old_name}-app-db" "${old_name}-graph-db" 2>/dev/null || true
+        docker network rm "${old_name}_default" 2>/dev/null || true
+        # Dossier bloodhound-automation
+        rm -rf "$BH_AUTO_DIR/projects/$old_name" 2>/dev/null || true
+        # Dossier projet
+        rm -rf "$old_proj" 2>/dev/null || true
+    done <<< "$OLD_PROJECTS"
+    ok "Anciens audits nettoyes"
+else
+    ok "Aucun ancien audit a supprimer"
+fi
 
 PROJECT_DIR="$PROJECTS_DIR/$PROJECT_NAME"
 mkdir -p "$PROJECT_DIR"
